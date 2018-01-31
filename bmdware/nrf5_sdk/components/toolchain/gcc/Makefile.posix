@@ -1,3 +1,31 @@
-GNU_INSTALL_ROOT := /usr/local/gcc-arm-none-eabi-4_9-2015q3
+GNU_INSTALL_ROOT ?= /usr/local/gcc-arm-none-eabi-4_9-2015q3
 GNU_VERSION := 4.9.3
 GNU_PREFIX := arm-none-eabi
+
+# Default to BMD300 project if BMD200 variable is not set to 1
+ifeq ("$(BMD200)","1")
+ic_type := NRF51
+ic_type_dir := nrf51
+softdevice := S130
+sd_dir := s130
+dtm_file := bmd200_dtm.c
+selftest_file := bmd200_selftest.c
+system_file := system_nrf51.c
+startup_file := gcc_startup_nrf51.s
+else
+ic_type := NRF52
+ic_type_dir := nrf52
+softdevice := S132
+sd_dir := s132
+dtm_file := bmd_dtm.c
+selftest_file := bmd_selftest.c
+system_file := system_nrf52.c
+startup_file := gcc_startup_nrf52.s
+endif
+
+# Default to RELEASE project if DEBUG variable is not set to 1
+ifeq ("$(DEBUG)","1")
+bmdware_build_type := DEBUG
+else
+bmdware_build_type := RELEASE
+endif
