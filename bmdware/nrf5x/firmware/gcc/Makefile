@@ -70,7 +70,9 @@ $(abspath $(COMMON_ROOT)/ble/ble_beacon_config.c) \
 $(abspath $(COMMON_ROOT)/ble/ble_dtm.c) \
 $(abspath $(COMMON_ROOT)/ble/ble_nus.c) \
 $(abspath $(COMMON_ROOT)/ble/gap.c) \
+$(abspath $(COMMON_ROOT)/ble/gatt.c) \
 $(abspath $(COMMON_ROOT)/lib/simple_uart.c) \
+$(abspath $(COMMON_ROOT)/lib/sw_irq_manager.c) \
 $(abspath $(COMMON_ROOT)/timeslot/nrf_advertiser.c) \
 $(abspath $(COMMON_ROOT)/timeslot/ts_controller.c) \
 $(abspath $(COMMON_ROOT)/timeslot/ts_peripheral.c) \
@@ -82,11 +84,11 @@ $(abspath $(SDK_ROOT)components/ble/ble_services/ble_dis/ble_dis.c) \
 $(abspath $(SDK_ROOT)components/ble/ble_error_log/ble_error_log.c) \
 $(abspath $(SDK_ROOT)components/ble/common/ble_srv_common.c) \
 $(abspath $(SDK_ROOT)components/drivers_nrf/ble_flash/ble_flash.c) \
-$(abspath $(SDK_ROOT)components/drivers_nrf/delay/nrf_delay.c) \
 $(abspath $(SDK_ROOT)components/drivers_nrf/common/nrf_drv_common.c) \
-$(abspath $(SDK_ROOT)components/drivers_nrf/pstorage/pstorage.c) \
+$(abspath $(SDK_ROOT)components/libraries/fstorage/fstorage.c) \
 $(abspath $(SDK_ROOT)components/libraries/util/app_error.c) \
 $(abspath $(SDK_ROOT)components/libraries/util/app_error_weak.c) \
+$(abspath $(SDK_ROOT)components/libraries/util/app_util_platform.c) \
 $(abspath $(SDK_ROOT)components/libraries/timer/app_timer.c) \
 $(abspath $(SDK_ROOT)components/libraries/util/nrf_assert.c) \
 $(abspath $(SDK_ROOT)components/softdevice/common/softdevice_handler/softdevice_handler.c) \
@@ -110,19 +112,22 @@ INC_PATHS += -I$(abspath $(SDK_ROOT)components/ble/ble_dtm)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/ble/common)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/device)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/drivers_nrf/ble_flash)
+INC_PATHS += -I$(abspath $(SDK_ROOT)components/drivers_nrf/clock)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/drivers_nrf/common)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/drivers_nrf/config)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/drivers_nrf/delay)
-INC_PATHS += -I$(abspath $(SDK_ROOT)components/drivers_nrf/pstorage)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/drivers_nrf/hal)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/libraries/ic_info)
+INC_PATHS += -I$(abspath $(SDK_ROOT)components/libraries/fstorage)
+INC_PATHS += -I$(abspath $(SDK_ROOT)components/libraries/log)
+INC_PATHS += -I$(abspath $(SDK_ROOT)components/libraries/log/src)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/libraries/timer)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/libraries/util)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/softdevice/common/softdevice_handler)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/softdevice/$(sd_dir)/headers)
-INC_PATHS += -I$(abspath $(SDK_ROOT)components/softdevice/$(sd_dir)/headers/$(ic_type))
+INC_PATHS += -I$(abspath $(SDK_ROOT)components/softdevice/$(sd_dir)/headers/$(ic_type_dir))
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/toolchain)
-INC_PATHS += -I$(abspath $(SDK_ROOT)components/toolchain/CMSIS/Include)
+INC_PATHS += -I$(abspath $(SDK_ROOT)components/toolchain/cmsis/include)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/toolchain/gcc)
 INC_PATHS += -I$(abspath $(SDK_ROOT)components/libraries/experimental_section_vars)
 
@@ -137,11 +142,14 @@ BUILD_DIRECTORIES := $(sort $(OBJECT_DIRECTORY) $(OUTPUT_BINARY_DIRECTORY) $(LIS
 CFLAGS  = -D$(ic_type)
 CFLAGS += -D$(softdevice)
 CFLAGS += -DSDK11
-CFLAGS += -DSOFTDEVICE_PRESENT
+# SOFTDEVICE_PRESENT not defined in Keil project...
+# -> Fixes linking issue for nrf_drv_clock_on_soc_event
+#CFLAGS += -DSOFTDEVICE_PRESENT
 CFLAGS += -DBLE_STACK_SUPPORT_REQD
 ifeq ("$(ic_type)","NRF52")
-	CFLAGS += -DAPP_START_ADDRESS=0x1c000
+	CFLAGS += -DAPP_START_ADDRESS=0x1f000
 	CFLAGS += -DCONFIG_NFCT_PINS_AS_GPIOS
+	CFLAGS += -DNRF_SD_BLE_API_VERSION=3
 	CFLAGS += -DNRF52_PAN_12
 	CFLAGS += -DNRF52_PAN_15
 	CFLAGS += -DNRF52_PAN_58
@@ -156,11 +164,14 @@ ifeq ("$(ic_type)","NRF52")
 	CFLAGS += -DNRF52_PAN_64
 	CFLAGS += -DNRF52_PAN_62
 	CFLAGS += -DNRF52_PAN_63
+	CFLAGS += -DSDK_VERSION=12
 	CFLAGS += -mcpu=cortex-m4
 	CFLAGS += -mfloat-abi=hard -mfpu=fpv4-sp-d16
 else
 	ifeq ("$(ic_type)","NRF51")
 		CFLAGS += -DAPP_START_ADDRESS=0x1b000
+		CFLAGS += -DCONFIG_NFCT_PINS_AS_GPIOS
+		CFLAGS += -DSDK_VERSION=11
 		CFLAGS += -mcpu=cortex-m0
 		CFLAGS += -mfloat-abi=soft
 	endif
@@ -170,10 +181,10 @@ CFLAGS += -mthumb -mabi=aapcs --std=gnu99
 CFLAGS += -D__HEAP_SIZE=0
 
 ifeq ("$(bmdware_build_type)", "RELEASE")
-	CFLAGS += -Wall -Werror -Os -g0
+	CFLAGS += -Wall -Os -g0
 	CFLAGS += -fomit-frame-pointer
 else
-	CFLAGS += -Wall -Werror -Og -g3
+	CFLAGS += -Wall -Og -g3
 endif	
 
 # keep every function in separate section. This will allow linker to dump unused functions
@@ -206,7 +217,7 @@ ASMFLAGS += -DSOFTDEVICE_PRESENT
 ASMFLAGS += -DBLE_STACK_SUPPORT_REQD
 ifeq ("$(ic_type)","NRF52")
 	ASMFLAGS += -DCONFIG_NFCT_PINS_AS_GPIOS
-	ASMFLAGS += -DAPP_START_ADDRESS=0x1c000
+	ASMFLAGS += -DAPP_START_ADDRESS=0x1f000
 	ASMFLAGS += -DNRF52_PAN_12
 	ASMFLAGS += -DNRF52_PAN_15
 	ASMFLAGS += -DNRF52_PAN_58
