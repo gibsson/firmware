@@ -13,7 +13,7 @@
 
 #include "nrf_error.h"
 #include "storage_intf.h"
-#include "ringBuf.h"
+#include "ringbuf.h"
 
 #include "at_commands.h"
     
