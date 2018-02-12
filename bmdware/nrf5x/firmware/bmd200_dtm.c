@@ -197,7 +197,7 @@ static void uartTX(const uint8_t * const data, uint8_t len)
     {
         for(uint8_t i= 0; i<len; i++)
         {
-            simple_uart_put(data[i]);
+            simple_uart_put_nonblocking(data[i]);
         }
     }
 }
